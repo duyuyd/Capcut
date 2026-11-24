@@ -1,0 +1,104 @@
+name: Import verified large Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      apk_url:
+        description: 'Public direct HTTPS download URL for the APK (not a sharing-page URL)'
+        required: true
+        type: string
+      expected_sha256:
+        description: 'Optional SHA-256 checksum for integrity verification'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-large-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  import-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Validate release branch and download URL
+        env:
+          APK_URL: ${{ inputs.apk_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::Run only from main to preserve release provenance."
+            exit 1
+          fi
+          if [[ "$APK_URL" != https://* ]]; then
+            echo "::error::A public direct HTTPS APK URL is required."
+            exit 1
+          fi
+
+      - name: Download uploaded APK (do not rebuild or pad bytes)
+        env:
+          APK_URL: ${{ inputs.apk_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          curl --fail --location --show-error --silent \
+            --retry 4 --retry-delay 5 --connect-timeout 30 --max-time 2400 \
+            --output dist/capcut-studio-imported.apk "$APK_URL"
+          BYTES=$(stat --format=%s dist/capcut-studio-imported.apk)
+          echo "APK bytes: $BYTES"
+          if (( BYTES < 330000000 )); then
+            echo "::error::Imported APK is under 330 MB (330,000,000 bytes)."
+            exit 1
+          fi
+          if (( BYTES >= 2000000000 )); then
+            echo "::error::APK exceeds the conservative GitHub Release upload size cap."
+            exit 1
+          fi
+          echo "APK_BYTES=$BYTES" >> "$GITHUB_ENV"
+
+      - name: Verify ZIP integrity, Android package and signature
+        env:
+          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=dist/capcut-studio-imported.apk
+          file "$APK"
+          unzip -tq "$APK" > /dev/null
+          unzip -Z1 "$APK" | grep -Fxq AndroidManifest.xml || {
+            echo "::error::AndroidManifest.xml missing"; exit 1;
+          }
+          if [[ -n "$EXPECTED_SHA256" ]]; then
+            printf '%s  %s\n' "$EXPECTED_SHA256" "$APK" | sha256sum --check --
+          fi
+          echo "SHA-256: $(sha256sum "$APK" | cut -d' ' -f1)"
+          SDK_BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          test -n "$SDK_BUILD_TOOLS"
+          "$SDK_BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          PKG=$("$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)
+          if [[ "$PKG" != "com.nptduy.capcutstudio" ]]; then
+            echo "::error::Package is '$PKG', not com.nptduy.capcutstudio; refusing to mislabel a different app."
+            exit 1
+          fi
+          echo "Android package verified: $PKG"
+
+      - name: Publish separate provenance-labeled APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="apk-import-${GITHUB_RUN_ID}"
+          SHA256=$(sha256sum dist/capcut-studio-imported.apk | cut -d' ' -f1)
+          printf 'Externally supplied APK, NOT rebuilt from the repository source.\n\nSource: user-supplied public download URL.\nPackage ID: com.nptduy.capcutstudio\nSize: %s bytes\nSHA-256: %s\n\nFile ZIP integrity and APK signature verified by GitHub Actions. Functional parity, content rights, and malware safety are NOT established by these checks.\n' "$APK_BYTES" "$SHA256" > dist/RELEASE_NOTES.md
+          gh release create "$TAG" \
+            dist/capcut-studio-imported.apk \
+            --target "$GITHUB_SHA" \
+            --title "Capcut Studio external APK import ($APK_BYTES bytes)" \
+            --notes-file dist/RELEASE_NOTES.md \
+            --prerelease
