@@ -70,7 +70,7 @@ jobs:
           APK=dist/capcut-studio-imported.apk
           file "$APK"
           unzip -tq "$APK" > /dev/null
-          unzip -Z1 "$APK" | grep -Fxq AndroidManifest.xml || {
+          unzip -Z1 "$APK" | grep -Fx AndroidManifest.xml > /dev/null || {
             echo "::error::AndroidManifest.xml missing"; exit 1;
           }
           if [[ -n "$EXPECTED_SHA256" ]]; then
