@@ -41,12 +41,45 @@ export default function VideoEditor(){
  if(text.trim()){setStatus('Đang thêm chữ');const canvas=document.createElement('canvas');canvas.width=outputWidth;canvas.height=outputHeight;const ctx=canvas.getContext('2d');if(!ctx)throw Error('Canvas not supported');ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold '+Math.round(outputWidth*.04)+'px Arial';ctx.strokeStyle='#000000';ctx.lineWidth=7;const lines=text.match(/.{1,35}(?:\s|$)/g)||[text];for(let i=0;i<lines.length;i++){const y=outputHeight*.79+(i-(lines.length-1)/2)*(outputWidth*.048);ctx.strokeText(lines[i].trim(),outputWidth/2,y);ctx.fillStyle=textColor;ctx.fillText(lines[i].trim(),outputWidth/2,y)}const blob=await new Promise<Blob>((res,rej)=>canvas.toBlob(b=>b?res(b):rej(Error('Cannot render caption')),'image/png'));await ff.writeFile('overlay.png',await fetchFile(blob));const overlay=await ff.exec(['-i',output,'-loop','1','-i','overlay.png','-filter_complex','[1:v][0:v]scale2ref=w=main_w:h=main_h[over][base];[base][over]overlay=0:0:shortest=1[v]','-map','[v]','-map','0:a?','-c:v','libx264','-preset','ultrafast','-crf','27','-c:a','copy','-shortest','captioned.mp4']);if(overlay!==0)throw Error('Lỗi thêm chữ');output='captioned.mp4'}
  setStatus('Đang tải video');const data=await ff.readFile(output);const bytes=typeof data==='string'?new TextEncoder().encode(data):new Uint8Array(data);const arrayBuffer=new ArrayBuffer(bytes.byteLength);new Uint8Array(arrayBuffer).set(bytes);const blob=new Blob([arrayBuffer],{type:'video/mp4'});if(blob.size<1000)throw Error('File xuất không hợp lệ');const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='capcut-export.mp4';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);setStatus('Xuất MP4 thành công: '+(blob.size/1048576).toFixed(1)+' MB')}catch(e){setError(e instanceof Error?e.message:String(e));setStatus('')}finally{setBusy(false)}};
  const [effect,setEffect]=useState<'none'|'mono'|'sepia'|'vivid'>('none');const [tab,setTab]=useState<'media'|'audio'|'text'|'effects'>('media');const [ratio,setRatio]=useState('16:9');const [playhead,setPlayhead]=useState(0);const [playing,setPlaying]=useState(false);const [zoom,setZoom]=useState(70);const preview=useRef<HTMLVideoElement>(null);const current=clips[Math.min(selected,clips.length-1)];const totalDuration=clips.reduce((sum,c)=>sum+Math.max(0,c.trimEnd-c.trimStart)/c.speed,0);const fmt=(n:number)=>{const v=Math.max(0,Math.floor(n));return String(Math.floor(v/60)).padStart(2,'0')+':'+String(v%60).padStart(2,'0')};
+ useEffect(()=>{
+  let cancelled=false;
+  void readProject().then(savedProject=>{
+   if(cancelled||!savedProject)return;
+   const loaded:Clip[]=savedProject.clips.map(c=>{
+     const url=URL.createObjectURL(c.file);allUrls.current.add(url);
+     return {...c,trimStart:c.trimStart??0,trimEnd:c.trimEnd??c.duration,speed:c.speed||1,volume:c.volume??1,preview:url};
+   });
+   setClips(loaded);setAudio(savedProject.audio);setText(savedProject.text);setTextColor(savedProject.textColor);setRatio(savedProject.ratio);setEffect(savedProject.effect);
+   setStatus(loaded.length?'Đã khôi phục '+loaded.length+' clip từ bộ nhớ thiết bị':'');
+  }).catch(e=>{if(!cancelled)setError('Không đọc được dự án đã lưu: '+String(e))}).finally(()=>{if(!cancelled)setRestored(true)});
+  return()=>{cancelled=true};
+ },[]);
+ useEffect(()=>{
+  if(!restored)return;
+  setSaved(false);
+  const timer=setTimeout(()=>{
+   void saveProject({clips:clips.map(({preview:unused,...rest})=>rest),audio,text,textColor,ratio,effect,updatedAt:Date.now()})
+    .then(()=>setSaved(true))
+    .catch(e=>setError('Không lưu được dự án vào máy: '+String(e)));
+  },900);
+  return()=>clearTimeout(timer);
+ },[restored,clips,audio,text,textColor,ratio,effect]);
+ useEffect(()=>{
+  const shortcut=(event:KeyboardEvent)=>{
+   if(!(event.ctrlKey||event.metaKey)||event.key.toLowerCase()!=='z')return;
+   const target=event.target;if(target instanceof HTMLInputElement||target instanceof HTMLTextAreaElement)return;
+   event.preventDefault();
+   if(event.shiftKey)redo();else undo();
+  };
+  window.addEventListener('keydown',shortcut);return()=>window.removeEventListener('keydown',shortcut);
+ },[clips,revision]);
+
 
  return <main className="studio-root">
  <header className="studio-topbar">
    <Link className="studio-brand" href="/"><span className="studio-logo">✦</span><strong>Capcut Studio</strong><span className="studio-project">Dự án không tên <ChevronDown size={13}/></span></Link>
    <span className="studio-top-sub">Trình biên tập video · Xử lý trên thiết bị</span>
-   <div className="studio-top-actions"><span className="studio-save">● Cục bộ</span><button className="studio-export" disabled={busy||!clips.length} onClick={()=>void exportVideo()}><Download size={16}/>{busy?'Đang xuất...':'Xuất video'}</button></div>
+   <div className="studio-top-actions"><button className="studio-history" title="Hoàn tác" aria-label="Hoàn tác" disabled={!history.current.past.length} onClick={undo}><Undo2 size={17}/></button><button className="studio-history" title="Làm lại" aria-label="Làm lại" disabled={!history.current.future.length} onClick={redo}><Redo2 size={17}/></button><span className="studio-save"><Save size={13}/> {saved?'Đã lưu trên máy':restored?'Đang lưu':'Đang mở'}</span><button className="studio-export" disabled={busy||!clips.length} onClick={()=>void exportVideo()}><Download size={16}/>{busy?'Đang xuất...':'Xuất video'}</button></div>
  </header>
  <div className="studio-workspace">
  <aside className="studio-asset-area">
@@ -66,7 +99,7 @@ export default function VideoEditor(){
    <div className="studio-pane-heading"><span><PanelsTopLeft size={15}/> Trình xem</span><span>Preview · {ratio}</span></div>
    <div className="studio-stage">
      <div className={'studio-screen '+(ratio==='9:16'?'portrait':ratio==='1:1'?'square':'landscape')}>
-       {current?<><video ref={preview} style={{filter:effect==='mono'?'grayscale(1)':effect==='sepia'?'sepia(1)':effect==='vivid'?'contrast(1.12) saturate(1.35)':'none'}} key={current.id} src={current.preview} playsInline onTimeUpdate={e=>setPlayhead(e.currentTarget.currentTime)} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onEnded={()=>setPlaying(false)}/>{text.trim()&&<div className="studio-text-overlay" style={{color:textColor}}>{text}</div>}</>:<div className="studio-empty-player"><Film size={42}/><b>Không có video</b><p>Nhập video ở bảng bên trái để bắt đầu chỉnh sửa</p></div>}
+       {current?<><video ref={preview} style={{filter:effect==='mono'?'grayscale(1)':effect==='sepia'?'sepia(1)':effect==='vivid'?'contrast(1.12) saturate(1.35)':'none'}} key={current.id} src={current.preview} playsInline onLoadedMetadata={e=>{e.currentTarget.currentTime=current.trimStart;setPlayhead(current.trimStart)}} onTimeUpdate={e=>{const player=e.currentTarget;setPlayhead(player.currentTime);if(player.currentTime>=current.trimEnd){player.pause();player.currentTime=current.trimStart}}} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onEnded={()=>setPlaying(false)}/>{text.trim()&&<div className="studio-text-overlay" style={{color:textColor}}>{text}</div>}</>:<div className="studio-empty-player"><Film size={42}/><b>Không có video</b><p>Nhập video ở bảng bên trái để bắt đầu chỉnh sửa</p></div>}
      </div>
    </div>
    <div className="studio-play-controls"><span>{fmt(playhead)} / {fmt(current?.duration||0)}</span><button aria-label={playing?'Tạm dừng':'Phát'} disabled={!current} onClick={()=>{const p=preview.current;if(!p)return;if(p.paused)void p.play();else p.pause()}}>{playing?<Pause size={19}/>:<Play size={19}/>}</button><select aria-label="Tỷ lệ khung hình" value={ratio} onChange={e=>setRatio(e.target.value)}><option>16:9</option><option>9:16</option><option>1:1</option></select></div>
@@ -74,13 +107,17 @@ export default function VideoEditor(){
  <aside className="studio-inspector">
    <div className="studio-pane-heading"><span>Thuộc tính</span><span>Video</span></div>
    <div className="studio-property-tabs"><span className="active">Cơ bản</span><span>Điều chỉnh</span></div>
-   {current?<div className="studio-properties"><p className="studio-minor truncate">{current.file.name}</p><label className="studio-form-label" htmlFor="trim-start">Bắt đầu (giây)</label><input id="trim-start" aria-label="Bắt đầu" className="studio-input" type="number" min="0" max={current.duration} step=".1" value={start} onChange={e=>setStart(Number(e.target.value))}/><label className="studio-form-label" htmlFor="trim-end">Kết thúc (giây)</label><input id="trim-end" aria-label="Kết thúc" className="studio-input" type="number" min="0" max={current.duration} step=".1" value={end} onChange={e=>setEnd(Number(e.target.value))}/><div className="studio-separator"/><b className="studio-minor">Thông tin nguồn</b><p className="studio-minor">Thời lượng: {current.duration.toFixed(2)}s</p><p className="studio-minor">Dung lượng: {(current.file.size/1048576).toFixed(1)} MB</p></div>:<p className="studio-minor p-4">Chọn một video để chỉnh sửa thuộc tính.</p>}
+   {current?<div className="studio-properties"><p className="studio-minor truncate">{current.file.name}</p><label className="studio-form-label" htmlFor="trim-start">Bắt đầu (giây)</label><input id="trim-start" aria-label="Bắt đầu" className="studio-input" type="number" min="0" max={current.trimEnd} step=".1" value={current.trimStart} onChange={e=>patchClip(current.id,{trimStart:Math.max(0,Math.min(current.trimEnd-.05,Number(e.target.value)))})}/>
+ <label className="studio-form-label" htmlFor="trim-end">Kết thúc (giây)</label><input id="trim-end" aria-label="Kết thúc" className="studio-input" type="number" min={current.trimStart} max={current.duration} step=".1" value={current.trimEnd} onChange={e=>patchClip(current.id,{trimEnd:Math.min(current.duration,Math.max(current.trimStart+.05,Number(e.target.value)))})}/>
+ <label className="studio-form-label" htmlFor="clip-speed">Tốc độ clip</label><select id="clip-speed" aria-label="Tốc độ clip" className="studio-input" value={current.speed} onChange={e=>patchClip(current.id,{speed:Number(e.target.value)})}><option value="0.5">0.5x · Chậm</option><option value="1">1x · Bình thường</option><option value="1.5">1.5x · Nhanh</option><option value="2">2x · Nhanh hơn</option></select>
+ <label className="studio-form-label" htmlFor="clip-volume">Âm lượng gốc: {Math.round(current.volume*100)}%</label><input id="clip-volume" aria-label="Âm lượng gốc" type="range" min="0" max="2" step=".1" value={current.volume} onChange={e=>patchClip(current.id,{volume:Number(e.target.value)})} className="w-full"/>
+ <button type="button" className="studio-action-split" onClick={split}><Split size={17}/> Tách clip tại vị trí xem</button><div className="studio-separator"/><b className="studio-minor">Thông tin nguồn</b><p className="studio-minor">Thời lượng: {current.duration.toFixed(2)}s</p><p className="studio-minor">Dung lượng: {(current.file.size/1048576).toFixed(1)} MB</p></div>:<p className="studio-minor p-4">Chọn một video để chỉnh sửa thuộc tính.</p>}
  </aside>
  </div>
  <section className="studio-timeline">
-   <div className="studio-timeline-header"><div className="studio-timeline-title"><Scissors size={16}/> Timeline <span className="studio-minor">· {clips.length} đoạn · {fmt(totalDuration)}</span></div><div className="studio-timeline-actions"><span>Thu phóng</span><input type="range" min="35" max="160" value={zoom} aria-label="Thu phóng timeline" onChange={e=>setZoom(Number(e.target.value))}/></div></div>
+   <div className="studio-timeline-header"><div className="studio-timeline-title"><Scissors size={16}/> Timeline <span className="studio-minor">· {clips.length} đoạn · {fmt(totalDuration)}</span></div><div className="studio-timeline-actions"><button type="button" className="studio-action-split" disabled={!current} onClick={split}><Split size={15}/> Tách clip</button><span>Thu phóng</span><input type="range" min="35" max="160" value={zoom} aria-label="Thu phóng timeline" onChange={e=>setZoom(Number(e.target.value))}/></div></div>
    <div className="studio-timeline-scroll"><div className="studio-ruler" style={{minWidth:Math.max(600,totalDuration*zoom)}}>{Array.from({length:Math.min(40,Math.floor(totalDuration/5)+2)},(_,i)=><span key={i} style={{left:i*5*zoom}}>{fmt(i*5)}</span>)}</div>
-   <div className="studio-track-row"><div className="studio-track-name"><Film size={16}/> Video</div><div className="studio-clip-track" style={{minWidth:Math.max(600,totalDuration*zoom)}}><DndContext collisionDetection={closestCenter} sensors={sensors} onDragEnd={reorder}><SortableContext items={clips.map(c=>c.id)} strategy={verticalListSortingStrategy}><div className="studio-clips">{clips.map((c,i)=><Track key={c.id} item={c} index={i} remove={()=>remove(c.id)}/>)}</div></SortableContext></DndContext></div></div>
+   <div className="studio-track-row"><div className="studio-track-name"><Film size={16}/> Video</div><div className="studio-clip-track" style={{minWidth:Math.max(600,totalDuration*zoom)}}><DndContext collisionDetection={closestCenter} sensors={sensors} onDragEnd={reorder}><SortableContext items={clips.map(c=>c.id)} strategy={horizontalListSortingStrategy}><div className="studio-clips">{clips.map((c,i)=><Track key={c.id} item={c} index={i} selected={selected===i} zoom={zoom} select={()=>setSelected(i)} remove={()=>remove(c.id)}/>)}</div></SortableContext></DndContext></div></div>
    <div className="studio-track-row"><div className="studio-track-name"><Type size={16}/> Văn bản</div><div className="studio-clip-track" style={{minWidth:Math.max(600,totalDuration*zoom)}}>{text.trim()&&<div className="studio-text-track" style={{width:Math.max(130,totalDuration*zoom)}}>{text}</div>}</div></div>
    <div className="studio-track-row"><div className="studio-track-name"><Volume2 size={16}/> Âm thanh</div><div className="studio-clip-track" style={{minWidth:Math.max(600,totalDuration*zoom)}}>{audio&&<div className="studio-audio-track" style={{width:Math.max(130,totalDuration*zoom)}}><Music size={15}/>{audio.name}</div>}</div></div></div>
    <div className="studio-footer">{status&&<span role="status" className="success">{status}</span>}{error&&<span role="alert" className="error">{error}</span>}{!status&&!error&&<span>FFmpeg.wasm · Thiết bị của bạn xử lý video, không cần API key.</span>}</div>
