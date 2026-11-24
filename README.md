@@ -7,7 +7,7 @@ npm install
 npm run dev
 ```
 
-Photo editor: /photo-editor. Video editor: /video-editor. Browsers must download FFmpeg wasm core on first video export. Video processing may be limited by memory on Android.
+Photo editor: /photo-editor. Video editor: /video-editor. The FFmpeg wasm core is copied from the pinned open-source npm package into public/ffmpeg during prebuild/predev and then served as a same-origin static asset, including inside the Android APK. Video processing may be limited by memory on Android.
 
 Workflow `.github/workflows/ci.yml` checks TS and builds static Next.js. Tagged `v*` push builds a debug APK and uploads it to GitHub Releases. No release tag or merge should be created before the Founder's `VERIFIED` comment.
 
