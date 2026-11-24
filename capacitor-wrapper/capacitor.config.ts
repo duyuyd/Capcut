@@ -1,0 +1,1 @@
+import type {CapacitorConfig} from '@capacitor/cli';const config:CapacitorConfig={appId:'com.nptduy.capcutstudio',appName:'Capcut Studio',webDir:'../out',server:{allowNavigation:['*.vercel.app']}};export default config;
