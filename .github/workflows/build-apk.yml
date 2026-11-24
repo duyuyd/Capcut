@@ -41,9 +41,12 @@ jobs:
           ./gradlew assembleDebug --no-daemon
       - name: Check output and copy
         run: |
-          APK=$(find capacitor-wrapper/android/app/build/outputs/apk/debug -name '*.apk' -print -quit)
+          find capacitor-wrapper/android/app/build/outputs/apk -name '*.apk' -printf '%p %s bytes\\n'
+          APK=$(find capacitor-wrapper/android/app/build/outputs/apk -name '*.apk' -print -quit)
           test -n "$APK"
-          test "$(stat -c%s "$APK")" -gt 5242880
+          BYTES=$(stat -c%s "$APK")
+          echo "APK size: $BYTES bytes"
+          if [ "$BYTES" -le 5242880 ]; then echo "::error::APK must exceed 5 MiB, got $BYTES bytes"; exit 1; fi
           mkdir -p dist
           cp "$APK" dist/capcut-studio-debug.apk
       - uses: actions/upload-artifact@v4
