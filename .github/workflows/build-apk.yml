@@ -5,6 +5,7 @@ on:
       - 'v*'
     branches:
       - feat/local-media-editors
+      - main
   workflow_dispatch:
 permissions:
   contents: write
@@ -65,3 +66,10 @@ jobs:
         run: |
           TAG="v0.1.0-preview-${GITHUB_SHA:0:7}"
           gh release create "$TAG" dist/capcut-studio-debug.apk --target "$GITHUB_SHA" --prerelease --title "Capcut Studio preview $TAG" --notes "Unmerged evaluation build. Not verified; no changes to main."
+      - name: Publish main Android Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v0.2.0-main-${GITHUB_SHA:0:7}"
+          gh release create "$TAG" dist/capcut-studio-debug.apk --target "$GITHUB_SHA" --latest --title "Capcut Studio Android $TAG" --notes "Built from main: FFmpeg.wasm and Capacitor APK; debug signed, not Play Store release."

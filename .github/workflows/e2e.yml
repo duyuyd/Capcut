@@ -1,7 +1,7 @@
 name: Browser E2E
 on:
   push:
-    branches: [feat/local-media-editors]
+    branches: [main, feat/local-media-editors]
   pull_request:
 permissions:
   contents: read
