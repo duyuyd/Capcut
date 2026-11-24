@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "android:sync": "npm run build && cd capacitor-wrapper && npx cap sync android"
+    "android:sync": "npm run build && cd capacitor-wrapper && npx cap sync android",
+    "prebuild": "node scripts/bundle-ffmpeg.mjs",
+    "predev": "node scripts/bundle-ffmpeg.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",
@@ -24,7 +26,8 @@
     "@remotion/player": "^4.0.0",
     "video.js": "^8.23.0",
     "lucide-react": "^0.468.0",
-    "@capacitor/core": "^7.4.0"
+    "@capacitor/core": "^7.4.0",
+    "@ffmpeg/core": "0.12.10"
   },
   "devDependencies": {
     "typescript": "^5.8.0",
