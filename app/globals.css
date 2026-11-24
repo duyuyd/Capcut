@@ -55,3 +55,14 @@
 
 /* Android-first editing order: viewer → timeline → tools, without duplicating UI. */
 @media(max-width:700px){.studio-root{min-height:100dvh}.studio-topbar{order:0}.studio-workspace{display:contents}.studio-player-area{order:1;height:min(49dvh,420px);min-height:265px}.studio-stage{min-height:180px;padding:8px}.studio-screen.landscape{width:min(100%,480px)}.studio-timeline{order:2;flex:none;min-height:228px;height:245px}.studio-timeline-header{height:44px}.studio-timeline-scroll{height:155px}.studio-asset-area{order:3;flex-direction:column-reverse;min-height:0;border-right:0;border-top:1px solid #383d49}.studio-sidebar{width:100%;min-height:70px;padding:4px 6px;flex-direction:row;justify-content:space-around;align-items:stretch;overflow-x:auto;border-top:1px solid #343946;border-right:0}.studio-nav-item{min-width:61px;width:75px;padding:8px 4px}.studio-nav-item svg{width:18px;height:18px}.studio-library{max-height:210px;min-height:105px}.studio-media-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.studio-footer{min-height:27px}.studio-player-area .studio-pane-heading{height:30px}.studio-play-controls{height:42px}}
+
+/* Real edit controls */
+.studio-action-split{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:7px 10px;background:#343b4a;border:1px solid #515a6c;border-radius:7px;color:#e6ebf5;font-size:11px;white-space:nowrap}
+.studio-action-split:hover:not(:disabled){background:#455069}
+.studio-action-split:disabled{opacity:.35}
+.studio-history{display:grid;place-items:center;width:30px;height:30px;color:#cbd5e1;border:1px solid #424a58;border-radius:6px}
+.studio-history:hover:not(:disabled){background:#353a46}
+.studio-save{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.studio-selected-clip{outline:2px solid #c5e5ff;outline-offset:1px}
+.studio-seek{min-width:70px;max-width:440px;flex:1;accent-color:#95bafe}
+@media(max-width:700px){.studio-top-actions{gap:5px}.studio-history{width:25px;height:27px}.studio-save{font-size:9px}.studio-play-controls{gap:5px}.studio-timeline-actions .studio-action-split{padding:6px;font-size:10px}.studio-seek{max-width:130px}}
