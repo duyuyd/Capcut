@@ -21,7 +21,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - name: Check Android SDK on GitHub runner
+        run: |
+          test -n "$ANDROID_HOME"
+          test -d "$ANDROID_HOME"
+          echo "Android SDK: $ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" || true
       - run: npm install --no-audit --no-fund
       - run: npm run lint
       - run: npm run build
